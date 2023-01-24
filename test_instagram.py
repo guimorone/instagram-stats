@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 
 import instaloader
-from instaloader.exceptions import TwoFactorAuthRequiredException
+from instaloader.exceptions import TwoFactorAuthRequiredException, ConnectionException
 
 
 class CustomLoggerFormatter(logging.Formatter):
@@ -76,6 +76,10 @@ class InstaBot:
                 logger.error("--- Error while trying to send the verification code ---")
                 code = input("Try again: ")
             self.__Loader.two_factor_login(code)
+        except ConnectionException:
+            logger.warning(
+                "Too many requests of login in this account, try again later!"
+            )
 
     def get_profile(self):
         profile_to_fetch = input(
