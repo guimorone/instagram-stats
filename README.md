@@ -2,13 +2,15 @@
 
 Get CSV files of the followers, the followings, and the people that do not follow back the account that you choose.
 
-# Requirements
+# Local
+
+## Requirements
 
 - Python 3.11.0
 
 Libs at `requirements.txt`
 
-# Usage
+## Usage
 
 USERNAME = username of the account to log in
 PASSWORD = password of the account to log in
@@ -22,10 +24,12 @@ After that:
 - If the account has two-factor authentication, it will be requested in the terminal.
 - Choose the profile to fetch in the terminal.
 
-### Note
+# Streamlit
 
-The search profile and the logged account may or may not be the same, it is not mandatory.
+libs at `requirements-streamlit.txt`
 
-### Troubleshooting
+# Notes
 
-If you're having trouble logging into the account, try logging in to the browser first
+-The search profile and the logged account may or may not be the same, it is not mandatory.
+
+-If you're having trouble logging into the account, try logging in to the browser first.

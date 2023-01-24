@@ -66,6 +66,7 @@ class InstaBot:
             st.warning("Too many requests of login in this account, try again later!")
         except (ConnectionException, BadCredentialsException) as e:
             st.error("Invalid credentials")
+            st.error(e)
             st.session_state.program_status = False
 
     def get_profile(self):

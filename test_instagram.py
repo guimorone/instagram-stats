@@ -5,7 +5,11 @@ import logging
 import pandas as pd
 
 import instaloader
-from instaloader.exceptions import TwoFactorAuthRequiredException, ConnectionException
+from instaloader.exceptions import (
+    TwoFactorAuthRequiredException,
+    ConnectionException,
+    BadCredentialsException,
+)
 
 
 class CustomLoggerFormatter(logging.Formatter):
@@ -76,10 +80,11 @@ class InstaBot:
                 logger.error("--- Error while trying to send the verification code ---")
                 code = input("Try again: ")
             self.__Loader.two_factor_login(code)
-        except ConnectionException:
-            logger.warning(
-                "Too many requests of login in this account, try again later!"
+        except (ConnectionException, BadCredentialsException):
+            logger.critical(
+                "Too many requests of login in this account or invalid credentials, try again later!"
             )
+            exit()
 
     def get_profile(self):
         profile_to_fetch = input(
@@ -145,8 +150,8 @@ class InstaBot:
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        logger.error(f"Usage: `python {sys.argv[0]} USERNAME PASSWORD`")
-        logger.critical("Set your credentials properly and try again!")
+        logger.warning(f"Usage: `python {sys.argv[0]} USERNAME PASSWORD`")
+        logger.error("Set your credentials properly and try again!")
     else:
         username = sys.argv[1]
         password = sys.argv[2]
