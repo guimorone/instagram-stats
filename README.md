@@ -30,6 +30,5 @@ libs at `requirements-streamlit.txt`
 
 # Notes
 
--The search profile and the logged account may or may not be the same, it is not mandatory.
-
--If you're having trouble logging into the account, try logging in to the browser first.
+- The search profile and the logged account may or may not be the same, it is not mandatory.
+- If you're having trouble logging into the account, try logging in to the browser first.
