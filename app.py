@@ -26,6 +26,7 @@ class InstaBot:
         self.__followers = []
         self.__followings = []
         self.__people_that_do_not_follow_back = []
+        self.__similar_accounts = []
 
         self.__all_methods = {
             "get_followers_stats": {
@@ -36,6 +37,7 @@ class InstaBot:
                     logger.debug(
                         f"People that do not follow back: {len(self.__people_that_do_not_follow_back)}"
                     ),
+                    logger.debug(f"Similar accounts: {len(self.__similar_accounts)}"),
                 ),
             }
         }
@@ -57,6 +59,9 @@ class InstaBot:
     def get_people_that_do_not_follow_back_list(self):
         return self.__people_that_do_not_follow_back
 
+    def get_similar_accounts_list(self):
+        return self.__similar_accounts
+
     # PUBLIC METHODS
     def run(self, method_choose: str):
         if not method_choose:
@@ -70,11 +75,13 @@ class InstaBot:
         except:
             logger.critical(f"{self.__method_applied} FAILED TO EXECUTE!")
 
-    def debug_numbers(self, title: str = "NUMBERS"):
+    def debug_numbers(self, header: str = "NUMBERS"):
+        title = header
         if not self.__method_applied:
             logger.warning("No method was chosen.")
             return
 
+        title += " " + self.__method_applied.upper()
         logger.debug(f"---------------- {title} ----------------")
         try:
             self.__all_methods.get(self.__method_applied).get("debug")()
@@ -82,7 +89,7 @@ class InstaBot:
             logger.error("Error while trying to print the debug numbers")
         finally:
             end_time = timeit.default_timer()
-            logger.debug("-----------------------------------------")
+            logger.debug("----------------------------------" + ("-" * len(title)))
             logger.debug(f"Runtime: {get_runtime_text(self.__start_time, end_time)}")
 
     def end_session(self, with_debug: bool = True):
@@ -116,6 +123,7 @@ class InstaBot:
         self.__people_that_do_not_follow_back = (
             self.__get_people_that_do_not_follow_back()
         )
+        self.__similar_accounts = self.__get_similar_accounts()
 
     def __get_profile(self):
         profile_to_fetch = input(
@@ -166,6 +174,17 @@ class InstaBot:
         )
 
         return people_that_do_not_follow_back
+
+    def __get_similar_accounts(self):
+        logger.info(
+            "Retrieving the usernames of all similar accounts and converting to CSV..."
+        )
+
+        similar_accounts = [sa.username for sa in self.__profile.get_similar_accounts()]
+        similar_accounts_df = pd.DataFrame(similar_accounts, columns=["Username"])
+        similar_accounts_df.to_csv("simillar_accounts.csv", index=False)
+
+        return similar_accounts
 
 
 if __name__ == "__main__":
