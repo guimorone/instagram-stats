@@ -13,6 +13,7 @@ Libs at `requirements.txt`
 ## Usage
 
 USERNAME = username of the account to log in
+
 PASSWORD = password of the account to log in
 
 ```sh
