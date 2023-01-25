@@ -18,8 +18,9 @@ class InstaloaderRateController(RateController):
         return super().query_waittime(query_type, current_time, untracked_queries)
 
     def wait_before_query(self, query_type: str) -> None:
-        secs = randint(10, 20)
+        secs = randint(20, 40)
         print("Waiting", secs, "seconds for", query_type, "query type")
+        print("** This is necessary due to instagram query limitations! **")
         sleep(secs)
         # return super().wait_before_query(query_type)
 
