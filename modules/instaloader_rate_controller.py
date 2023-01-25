@@ -14,7 +14,7 @@ class InstaloaderRateController(RateController):
         return super().query_waittime(query_type, current_time, untracked_queries)
 
     def wait_before_query(self, query_type: str):
-        super().wait_before_query(query_type)
+        return super().wait_before_query(query_type)
 
     def handle_429(self, query_type: str):
-        super().handle_429(query_type)
+        return super().handle_429(query_type)

@@ -8,6 +8,7 @@ from instaloader.exceptions import (
     ConnectionException,
     BadCredentialsException,
 )
+from pick import pick
 from modules.instaloader_rate_controller import InstaloaderRateController
 from utils.misc import setup_logger, get_runtime_text
 
@@ -15,9 +16,7 @@ logger = setup_logger(__name__)
 
 
 class InstaBot:
-    def __init__(self, username: str, password: str, start_time: float):
-        self.__start_time = start_time
-
+    def __init__(self, username: str, password: str):
         self.__username = username
         self.__password = password
         self.__Loader = instaloader.Instaloader(
@@ -29,21 +28,22 @@ class InstaBot:
         self.__people_that_do_not_follow_back = []
 
         self.__all_methods = {
-            "get_followers_stats": lambda: (
-                logger.debug(f"Followers: {len(self.__followers)}"),
-                logger.debug(f"Followings: {len(self.__followings)}"),
-                logger.debug(
-                    f"People that do not follow back: {len(self.__people_that_do_not_follow_back)}"
+            "get_followers_stats": {
+                "method": self.__get_followers_stats,
+                "debug": lambda: (
+                    logger.debug(f"Followers: {len(self.__followers)}"),
+                    logger.debug(f"Followings: {len(self.__followings)}"),
+                    logger.debug(
+                        f"People that do not follow back: {len(self.__people_that_do_not_follow_back)}"
+                    ),
                 ),
-            )
+            }
         }
         self.__method_applied = ""
 
-        self.__login()
-
-    # GETTERS
-    def see_all_methods_as_list(self):
-        return list(self.__all_methods.keys())
+    # GETTERS AND SETTERS
+    def see_all_methods_as_list(self, upper_names: bool = True):
+        return [m.upper() if upper_names else m for m in self.__all_methods.keys()]
 
     def see_current_method(self):
         return self.__method_applied
@@ -58,29 +58,36 @@ class InstaBot:
         return self.__people_that_do_not_follow_back
 
     # PUBLIC METHODS
-    def get_followers_stats(self):
-        self.__method_applied = "get_followers_stats"
-        self.__profile = self.__get_profile()
-        self.__followers = self.__get_followers(self.__profile)
-        self.__followings = self.__get_followees(self.__profile)
-        self.__people_that_do_not_follow_back = (
-            self.__get_people_that_do_not_follow_back()
-        )
+    def run(self, method_choose: str):
+        if not method_choose:
+            return
 
-    def debug_numbers(self, start_time: float, title="NUMBERS"):
-        logger.debug(f"-------------- {title} --------------")
+        self.__start_time = timeit.default_timer()
+        self.__method_applied = method_choose
+        self.__login()
         try:
-            self.__all_methods.get(self.__method_applied)()
+            self.__all_methods.get(self.__method_applied).get("method")()
+        except:
+            logger.critical(f"{self.__method_applied} FAILED TO EXECUTE!")
+
+    def debug_numbers(self, title: str = "NUMBERS"):
+        if not self.__method_applied:
+            logger.warning("No method was chosen.")
+            return
+
+        logger.debug(f"---------------- {title} ----------------")
+        try:
+            self.__all_methods.get(self.__method_applied).get("debug")()
         except:
             logger.error("Error while trying to print the debug numbers")
         finally:
             end_time = timeit.default_timer()
-            logger.debug(f"Runtime: {get_runtime_text(start_time, end_time)}")
-            logger.debug("-------------------------------------")
+            logger.debug("-----------------------------------------")
+            logger.debug(f"Runtime: {get_runtime_text(self.__start_time, end_time)}")
 
-    def end_session(self, with_debug=True):
+    def end_session(self, with_debug: bool = True):
         if with_debug:
-            self.debug_numbers(self.__start_time)
+            self.debug_numbers()
         self.__Loader.close()
 
     # PRIVATE METHODS
@@ -91,16 +98,24 @@ class InstaBot:
         except TwoFactorAuthRequiredException:
             code = input("Verification Code: ")
             while not code:
-                logger.error(
+                logger.warning(
                     "--- Error while trying to send the verification code, it seems that it is empty ---"
                 )
                 code = input("Try again: ")
             self.__Loader.two_factor_login(code)
         except (ConnectionException, BadCredentialsException):
-            logger.critical(
+            logger.error(
                 "Too many requests of login in this account or invalid credentials, try again later!"
             )
             exit()
+
+    def __get_followers_stats(self):
+        self.__profile = self.__get_profile()
+        self.__followers = self.__get_followers()
+        self.__followings = self.__get_followees()
+        self.__people_that_do_not_follow_back = (
+            self.__get_people_that_do_not_follow_back()
+        )
 
     def __get_profile(self):
         profile_to_fetch = input(
@@ -113,23 +128,23 @@ class InstaBot:
             self.__Loader.context, profile_to_fetch
         )
 
-    def __get_followers(self, profile: instaloader.Profile):
+    def __get_followers(self):
         logger.info(
             "Retrieving the usernames of all followers and converting to CSV..."
         )
 
-        followers = [follower.username for follower in profile.get_followers()]
+        followers = [follower.username for follower in self.__profile.get_followers()]
         followers_df = pd.DataFrame(followers, columns=["Username"])
         followers_df.to_csv("followers.csv", index=False)
 
         return followers
 
-    def __get_followees(self, profile: instaloader.Profile):
+    def __get_followees(self):
         logger.info(
             "Retrieving the usernames of all followings and converting to CSV..."
         )
 
-        followings = [followee.username for followee in profile.get_followees()]
+        followings = [followee.username for followee in self.__profile.get_followees()]
         followings_df = pd.DataFrame(followings, columns=["Username"])
         followings_df.to_csv("followings.csv", index=False)
 
@@ -158,12 +173,17 @@ if __name__ == "__main__":
         logger.warning(f"Usage: `python {sys.argv[0]} USERNAME PASSWORD`")
         logger.error("Set your credentials properly and try again!")
     else:
-        start_time = timeit.default_timer()
         username = sys.argv[1]
         password = sys.argv[2]
+        instagram_instance = InstaBot(username, password)
         try:
-            instance = InstaBot(username, password, start_time)
-            instance.get_followers_stats()
-            instance.end_session()
+            title = "Please, choose your option: "
+            options = instagram_instance.see_all_methods_as_list()
+            option, index = pick(options, title, indicator="=>", default_index=0)
+            print(f"{index + 1}º", "method chosen:", option, end="\n\n")
+
+            instagram_instance.run(option.lower())
         except:
             traceback.print_exc()
+        finally:
+            instagram_instance.end_session()

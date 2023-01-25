@@ -16,7 +16,7 @@ USERNAME = username of the account to log in
 PASSWORD = password of the account to log in
 
 ```sh
-  python instagram_stats.py USERNAME PASSWORD
+  python app.py USERNAME PASSWORD
 ```
 
 # Notes
