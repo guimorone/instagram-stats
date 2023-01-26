@@ -8,7 +8,7 @@ from utils.constants import RANDOM_GAP
 
 class InstaloaderRateController(RateController):
     # DEFAULT METHODS
-    def __init__(self, context: InstaloaderContext, before_query_secs: int = 0):
+    def __init__(self, context: InstaloaderContext, before_query_secs: int = 0) -> None:
         super().__init__(context)
         self.__before_query_secs = int(before_query_secs)
 
@@ -35,6 +35,6 @@ class InstaloaderRateController(RateController):
     def handle_429(self, query_type: str) -> None:
         return super().handle_429(query_type)
 
-    # PERSONAL METHODS
+    # NEW METHODS
     def add_before_query_secs(self, secs: int) -> None:
         self.__before_query_secs += int(secs)

@@ -3,8 +3,10 @@ from modules.custom_logger_formatter import CustomLoggerFormatter
 
 
 def setup_logger(
-    name: str, level=logging.DEBUG, Formatter: logging.Formatter = CustomLoggerFormatter
-):
+    name: str,
+    level: int = logging.DEBUG,
+    Formatter: logging.Formatter = CustomLoggerFormatter,
+) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(level)
 
@@ -17,7 +19,7 @@ def setup_logger(
     return logger
 
 
-def get_runtime_text(start_time: float, end_time: float):
+def get_runtime_text(start_time: float, end_time: float) -> str:
     full_time = end_time - start_time
     minutes = full_time // 60
     seconds = full_time - (minutes * 60)

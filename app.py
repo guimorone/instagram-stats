@@ -7,6 +7,8 @@ from instaloader.exceptions import (
     TwoFactorAuthRequiredException,
     ConnectionException,
     BadCredentialsException,
+    InvalidArgumentException,
+    ProfileNotExistsException,
 )
 from pick import pick
 from modules.instaloader_rate_controller import InstaloaderRateController
@@ -17,7 +19,7 @@ logger = setup_logger(__name__)
 
 
 class InstaBot:
-    def __init__(self, username: str, password: str):
+    def __init__(self, username: str, password: str) -> None:
         self.__username = username
         self.__password = password
         self.__Loader = instaloader.Instaloader(
@@ -45,26 +47,26 @@ class InstaBot:
         self.__method_applied = ""
 
     # GETTERS AND SETTERS
-    def see_all_methods_as_list(self, upper_names: bool = True):
+    def see_all_methods_as_list(self, upper_names: bool = True) -> list[str]:
         return [m.upper() if upper_names else m for m in self.__all_methods.keys()]
 
-    def see_current_method(self):
+    def see_current_method(self) -> str:
         return self.__method_applied
 
-    def get_followers_list(self):
+    def get_followers_list(self) -> list[str]:
         return self.__followers
 
-    def get_followings_list(self):
+    def get_followings_list(self) -> list[str]:
         return self.__followings
 
-    def get_people_that_do_not_follow_back_list(self):
+    def get_people_that_do_not_follow_back_list(self) -> list[str]:
         return self.__people_that_do_not_follow_back
 
-    def get_similar_accounts_list(self):
+    def get_similar_accounts_list(self) -> list[str]:
         return self.__similar_accounts
 
     # PUBLIC METHODS
-    def run(self, method_choose: str):
+    def run(self, method_choose: str) -> None:
         if not method_choose:
             return
 
@@ -76,7 +78,7 @@ class InstaBot:
         except:
             logger.critical(f"{self.__method_applied} FAILED TO EXECUTE!")
 
-    def debug_numbers(self, header: str = "NUMBERS"):
+    def debug_numbers(self, header: str = "NUMBERS") -> None:
         title = header
         if not self.__method_applied:
             logger.warning("No method was chosen.")
@@ -93,13 +95,13 @@ class InstaBot:
             logger.debug("----------------------------------" + ("-" * len(title)))
             logger.debug(f"Runtime: {get_runtime_text(self.__start_time, end_time)}")
 
-    def end_session(self, with_debug: bool = True):
+    def end_session(self, with_debug: bool = True) -> None:
         if with_debug:
             self.debug_numbers()
         self.__Loader.close()
 
     # PRIVATE METHODS
-    def __login(self):
+    def __login(self) -> None:
         try:
             logger.info(f"Logging into {self.__username} account...")
             self.__Loader.login(self.__username, self.__password)
@@ -111,16 +113,18 @@ class InstaBot:
                 )
                 code = input("Try again: ")
             self.__Loader.two_factor_login(code)
-        except (ConnectionException, BadCredentialsException):
-            logger.error(
-                "Too many requests of login in this account or invalid credentials, try again later!"
-            )
+        except (
+            ConnectionException,
+            BadCredentialsException,
+            InvalidArgumentException,
+        ) as err:
+            logger.error(err)
             exit()
 
-    def __rate_controller_add_before_query_secs(self, secs: int):
+    def __rate_controller_add_before_query_secs(self, secs: int) -> None:
         self.__Loader.context._rate_controller.add_before_query_secs(secs)
 
-    def __get_followers_stats(self):
+    def __get_followers_stats(self) -> None:
         self.__profile = self.__get_profile()
         self.__followers = self.__get_followers()
         self.__followings = self.__get_followees()
@@ -129,16 +133,30 @@ class InstaBot:
         )
         self.__similar_accounts = self.__get_similar_accounts()
 
-    def __get_profile(self):
+    def __get_profile(self) -> instaloader.Profile:
+        profile = None
         profile_to_fetch = input(
             "Profile to fetch (skip to fetch the logged account): "
         )
-        profile_to_fetch = profile_to_fetch if profile_to_fetch else self.__username
-        logger.info(f"Loading {profile_to_fetch} profile from an Instagram handle...")
 
-        profile = instaloader.Profile.from_username(
-            self.__Loader.context, profile_to_fetch
-        )
+        while True:
+            profile_to_fetch = profile_to_fetch if profile_to_fetch else self.__username
+            logger.info(
+                f"Loading {profile_to_fetch} profile from an Instagram handle..."
+            )
+            try:
+                profile = instaloader.Profile.from_username(
+                    self.__Loader.context, profile_to_fetch
+                )
+            except ProfileNotExistsException:
+                logger.error("Profile do not exist, try again!")
+                profile_to_fetch = input(
+                    "Profile to fetch (skip to fetch the logged account): "
+                )
+            except:
+                traceback.print_exc()
+            else:
+                break
 
         num_followers = profile.followers
         num_followings = profile.followees
@@ -147,7 +165,7 @@ class InstaBot:
 
         return profile
 
-    def __get_followers(self):
+    def __get_followers(self) -> list[str]:
         logger.info(
             "Retrieving the usernames of all followers and converting to CSV..."
         )
@@ -158,7 +176,7 @@ class InstaBot:
 
         return followers
 
-    def __get_followees(self):
+    def __get_followees(self) -> list[str]:
         logger.info(
             "Retrieving the usernames of all followings and converting to CSV..."
         )
@@ -169,7 +187,7 @@ class InstaBot:
 
         return followings
 
-    def __get_people_that_do_not_follow_back(self):
+    def __get_people_that_do_not_follow_back(self) -> list[str]:
         logger.info(
             "Retrieving the usernames of all people that do not follow back and converting to CSV..."
         )
@@ -186,7 +204,7 @@ class InstaBot:
 
         return people_that_do_not_follow_back
 
-    def __get_similar_accounts(self):
+    def __get_similar_accounts(self) -> list[str]:
         logger.info(
             "Retrieving the usernames of all similar accounts and converting to CSV..."
         )
