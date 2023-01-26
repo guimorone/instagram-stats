@@ -11,6 +11,7 @@ from instaloader.exceptions import (
 from pick import pick
 from modules.instaloader_rate_controller import InstaloaderRateController
 from utils.misc import setup_logger, get_runtime_text
+from utils.constants import USERS_LIMIT, SECONDS_TO_ADD
 
 logger = setup_logger(__name__)
 
@@ -116,6 +117,9 @@ class InstaBot:
             )
             exit()
 
+    def __rate_controller_add_before_query_secs(self, secs: int):
+        self.__Loader.context._rate_controller.add_before_query_secs(secs)
+
     def __get_followers_stats(self):
         self.__profile = self.__get_profile()
         self.__followers = self.__get_followers()
@@ -132,9 +136,16 @@ class InstaBot:
         profile_to_fetch = profile_to_fetch if profile_to_fetch else self.__username
         logger.info(f"Loading {profile_to_fetch} profile from an Instagram handle...")
 
-        return instaloader.Profile.from_username(
+        profile = instaloader.Profile.from_username(
             self.__Loader.context, profile_to_fetch
         )
+
+        num_followers = profile.followers
+        num_followings = profile.followees
+        secs = ((num_followers + num_followings) // USERS_LIMIT) * SECONDS_TO_ADD
+        self.__rate_controller_add_before_query_secs(secs)
+
+        return profile
 
     def __get_followers(self):
         logger.info(
