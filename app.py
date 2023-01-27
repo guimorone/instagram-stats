@@ -2,6 +2,7 @@ import pandas as pd
 import sys
 import traceback
 import timeit
+import time
 import instaloader
 from instaloader.exceptions import (
     TwoFactorAuthRequiredException,
@@ -20,12 +21,14 @@ logger = setup_logger(__name__)
 
 class InstaBot:
     def __init__(self, username: str, password: str) -> None:
-        self.__username = username
-        self.__password = password
+        self.query_wait_time = 20  # seconds
+        self.__username = username.strip()
+        self.__password = password.strip()
         self.__Loader = instaloader.Instaloader(
             rate_controller=lambda ctx: InstaloaderRateController(ctx)
         )
         self.__profile = None
+        self.profile_to_fetch = ""
         self.__followers = []
         self.__followings = []
         self.__people_that_do_not_follow_back = []
@@ -73,10 +76,20 @@ class InstaBot:
         self.__start_time = timeit.default_timer()
         self.__method_applied = method_choose
         self.__login()
-        try:
-            self.__all_methods.get(self.__method_applied).get("method")()
-        except:
-            logger.critical(f"{self.__method_applied} FAILED TO EXECUTE!")
+        while True:
+            try:
+                self.__all_methods.get(self.__method_applied).get("method")()
+            except ConnectionException:
+                logger.error("Connection expired, logging in again...")
+                self.__login()
+            except:
+                logger.critical(f"{self.__method_applied} FAILED TO EXECUTE!")
+                logger.warning(
+                    f"Waiting {self.query_wait_time} seconds before trying again."
+                )
+                time.sleep(self.query_wait_time)
+            else:
+                break
 
     def debug_numbers(self, header: str = "NUMBERS") -> None:
         title = header
@@ -121,26 +134,30 @@ class InstaBot:
             logger.error(err)
             exit()
 
-    def __rate_controller_add_before_query_secs(self, secs: int) -> None:
-        self.__Loader.context._rate_controller.add_before_query_secs(secs)
+    # def __rate_controller_add_before_query_secs(self, secs: int) -> None:
+    #     self.__Loader.context._rate_controller.add_before_query_secs(secs)
 
     def __get_followers_stats(self) -> None:
-        self.__profile = self.__get_profile()
-        self.__followers = self.__get_followers()
-        self.__followings = self.__get_followees()
+        self.__profile, num_followers, num_followings = self.__get_profile()
+        self.__followers = self.__get_followers(num_followers)
+        self.__followings = self.__get_followees(num_followings)
         self.__people_that_do_not_follow_back = (
             self.__get_people_that_do_not_follow_back()
         )
         self.__similar_accounts = self.__get_similar_accounts()
 
-    def __get_profile(self) -> instaloader.Profile:
+    def __get_profile(self) -> tuple[instaloader.Profile, int, int]:
         profile = None
-        profile_to_fetch = input(
-            "Profile to fetch (skip to fetch the logged account): "
+        profile_to_fetch = (
+            self.profile_to_fetch
+            if self.profile_to_fetch
+            else input("Profile to fetch (skip to fetch the logged account): ")
         )
 
         while True:
-            profile_to_fetch = profile_to_fetch if profile_to_fetch else self.__username
+            profile_to_fetch = (
+                profile_to_fetch.strip() if profile_to_fetch else self.__username
+            )
             logger.info(
                 f"Loading {profile_to_fetch} profile from an Instagram handle..."
             )
@@ -153,35 +170,71 @@ class InstaBot:
                 profile_to_fetch = input(
                     "Profile to fetch (skip to fetch the logged account): "
                 )
-            except:
-                traceback.print_exc()
+            except Exception as err:
+                logger.error(err)
             else:
                 break
 
+        self.profile_to_fetch = profile_to_fetch
+
         num_followers = profile.followers
         num_followings = profile.followees
-        secs = ((num_followers + num_followings) // USERS_LIMIT) * SECONDS_TO_ADD
-        self.__rate_controller_add_before_query_secs(secs)
+        # secs = ((num_followers + num_followings) // USERS_LIMIT) * SECONDS_TO_ADD
+        # self.__rate_controller_add_before_query_secs(secs)
 
-        return profile
+        return profile, num_followers, num_followings
 
-    def __get_followers(self) -> list[str]:
-        logger.info(
-            "Retrieving the usernames of all followers and converting to CSV..."
-        )
+    def __get_followers(self, num_followers: int) -> list[str]:
+        followers = []
+        count = 1
 
-        followers = [follower.username for follower in self.__profile.get_followers()]
+        wait_time = self.query_wait_time
+        while True:
+            wait_time += 10 * (count // 10)
+            logger.info(
+                f"{count}º attempt. Retrieving the usernames of all followers and converting to CSV..."
+            )
+            followers = [
+                follower.username for follower in self.__profile.get_followers()
+            ]
+
+            if len(followers) == num_followers:
+                break
+
+            count += 1
+            logger.warning(
+                f"Trying again due to Instagram query limitations! Please wait {wait_time} seconds."
+            )
+            time.sleep(wait_time)
+
         followers_df = pd.DataFrame(followers, columns=["Username"])
         followers_df.to_csv("followers.csv", index=False)
 
         return followers
 
-    def __get_followees(self) -> list[str]:
-        logger.info(
-            "Retrieving the usernames of all followings and converting to CSV..."
-        )
+    def __get_followees(self, num_followings: int) -> list[str]:
+        followings = []
+        count = 1
 
-        followings = [followee.username for followee in self.__profile.get_followees()]
+        wait_time = self.query_wait_time
+        while True:
+            wait_time += 10 * (count // 10)
+            logger.info(
+                f"{count}º attempt. Retrieving the usernames of all followings and converting to CSV..."
+            )
+            followings = [
+                followee.username for followee in self.__profile.get_followees()
+            ]
+
+            if len(followings) == num_followings:
+                break
+
+            count += 1
+            logger.warning(
+                f"Trying again due to Instagram query limitations! Please wait {wait_time} seconds."
+            )
+            time.sleep(wait_time)
+
         followings_df = pd.DataFrame(followings, columns=["Username"])
         followings_df.to_csv("followings.csv", index=False)
 
