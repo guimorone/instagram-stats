@@ -1,36 +1,39 @@
-import pandas as pd
 import sys
-import traceback
-import timeit
 import time
+import timeit
+import traceback
+import pandas as pd
 import instaloader
+from typing import List, Tuple, Optional
 from instaloader.exceptions import (
     TwoFactorAuthRequiredException,
     ConnectionException,
     BadCredentialsException,
-    InvalidArgumentException,
     ProfileNotExistsException,
 )
 from pick import pick
 from modules.instaloader_rate_controller import InstaloaderRateController
 from utils.misc import setup_logger, get_runtime_text
-from utils.constants import USERS_LIMIT, SECONDS_TO_ADD
+from utils.constants import USERS_LIMIT, SECONDS_TO_ADD, QUERY_WAIT
 
 logger = setup_logger(__name__)
 
 
 class InstaBot:
-    def __init__(self, username: str, password: str) -> None:
-        self.query_wait_time = 20  # seconds
-        self.__username = username.strip()
-        self.__password = password.strip()
-        self.__Loader = instaloader.Instaloader(rate_controller=lambda ctx: InstaloaderRateController(ctx))
-        self.__profile = None
-        self.profile_to_fetch = ""
-        self.__followers = []
-        self.__followees = []
-        self.__people_that_do_not_follow_back = []
-        self.__similar_accounts = []
+    def __init__(self, username: str, password: str, add_before_query_secs: bool = True) -> None:
+        self.add_before_query_secs: bool = add_before_query_secs
+        self.query_wait_time: int = QUERY_WAIT
+        self.__username: str = username.strip()
+        self.__password: str = password.strip()
+        self.__Loader: instaloader.Instaloader = instaloader.Instaloader(
+            rate_controller=lambda ctx: InstaloaderRateController(ctx)
+        )
+        self.__profile: Optional[instaloader.Profile] = None
+        self.profile_to_fetch: str = ""
+        self.__followers: List[str] = []
+        self.__followees: List[str] = []
+        self.__people_that_do_not_follow_back: List[str] = []
+        self.__similar_accounts: List[str] = []
 
         self.__all_methods = {
             "get_followers_stats": {
@@ -46,22 +49,22 @@ class InstaBot:
         self.__method_applied = ""
 
     # GETTERS AND SETTERS
-    def see_all_methods_as_list(self, upper_names: bool = True) -> list[str]:
+    def see_all_methods_as_list(self, upper_names: bool = True) -> List[str]:
         return [m.upper() if upper_names else m for m in self.__all_methods.keys()]
 
     def see_current_method(self) -> str:
         return self.__method_applied
 
-    def get_followers_list(self) -> list[str]:
+    def get_followers_list(self) -> List[str]:
         return self.__followers
 
-    def get_followees_list(self) -> list[str]:
+    def get_followees_list(self) -> List[str]:
         return self.__followees
 
-    def get_people_that_do_not_follow_back_list(self) -> list[str]:
+    def get_people_that_do_not_follow_back_list(self) -> List[str]:
         return self.__people_that_do_not_follow_back
 
-    def get_similar_accounts_list(self) -> list[str]:
+    def get_similar_accounts_list(self) -> List[str]:
         return self.__similar_accounts
 
     # PUBLIC METHODS
@@ -69,8 +72,8 @@ class InstaBot:
         if not method_choose:
             return
 
-        self.__start_time = timeit.default_timer()
-        self.__method_applied = method_choose
+        self.__start_time: float = timeit.default_timer()
+        self.__method_applied: str = method_choose
         self.__login()
         while True:
             try:
@@ -79,7 +82,8 @@ class InstaBot:
                 logger.error("Connection expired, logging in again...")
                 self.__login()
             except:
-                logger.critical(f"{self.__method_applied} FAILED TO EXECUTE!")
+                traceback.print_exc()
+                logger.error(f"{self.__method_applied} FAILED TO EXECUTE!")
                 logger.warning(f"Waiting {self.query_wait_time} seconds before trying again.")
                 time.sleep(self.query_wait_time)
             else:
@@ -114,20 +118,17 @@ class InstaBot:
             self.__Loader.login(self.__username, self.__password)
         except TwoFactorAuthRequiredException:
             code = input("Verification Code: ")
-            while not code:
-                logger.warning("--- Error while trying to send the verification code, it seems that it is empty ---")
-                code = input("Try again: ")
-            self.__Loader.two_factor_login(code)
-        except (
-            ConnectionException,
-            BadCredentialsException,
-            InvalidArgumentException,
-        ) as err:
-            logger.error(err)
-            exit()
+            while True:
+                try:
+                    self.__Loader.two_factor_login(code)
+                except BadCredentialsException:
+                    logger.error("Invalid verification code, try again!")
+                    code = input("Verification Code (try again): ")
+                else:
+                    break
 
-    # def __rate_controller_add_before_query_secs(self, secs: int) -> None:
-    #     self.__Loader.context._rate_controller.add_before_query_secs(secs)
+    def __rate_controller_add_before_query_secs(self, secs: int) -> None:
+        self.__Loader.context._rate_controller.add_before_query_secs(secs)
 
     def __get_followers_stats(self) -> None:
         self.__profile, num_followers, num_followees = self.__get_profile()
@@ -136,7 +137,7 @@ class InstaBot:
         self.__people_that_do_not_follow_back = self.__get_people_that_do_not_follow_back()
         self.__similar_accounts = self.__get_similar_accounts()
 
-    def __get_profile(self) -> tuple[instaloader.Profile, int, int]:
+    def __get_profile(self) -> Tuple[instaloader.Profile, int, int]:
         profile = None
         profile_to_fetch = (
             self.profile_to_fetch
@@ -161,25 +162,27 @@ class InstaBot:
 
         num_followers = profile.followers
         num_followees = profile.followees
-        # secs = ((num_followers + num_followees) // USERS_LIMIT) * SECONDS_TO_ADD
-        # self.__rate_controller_add_before_query_secs(secs)
+        if self.add_before_query_secs:
+            self.__rate_controller_add_before_query_secs(
+                ((num_followers + num_followees) // USERS_LIMIT) * SECONDS_TO_ADD
+            )
 
         return profile, num_followers, num_followees
 
-    def __get_followers(self, num_followers: int) -> list[str]:
+    def __get_followers(self, num_followers: int) -> List[str]:
         followers = []
-        count = 1
+        attempts_count = 1
 
         wait_time = self.query_wait_time
         while True:
-            wait_time += 10 * (count // 10)
-            logger.info(f"{count}º attempt. Retrieving the usernames of all followers and converting to CSV...")
+            wait_time += 10 * (attempts_count // 10)
+            logger.info(f"{attempts_count}º attempt. Retrieving the usernames of all followers and converting to CSV...")
             followers = [follower.username for follower in self.__profile.get_followers()]
 
             if len(followers) >= num_followers:
                 break
 
-            count += 1
+            attempts_count += 1
             logger.warning(f"Trying again due to Instagram query limitations! Please wait {wait_time} seconds.")
             time.sleep(wait_time)
 
@@ -188,20 +191,22 @@ class InstaBot:
 
         return followers
 
-    def __get_followees(self, num_followees: int) -> list[str]:
+    def __get_followees(self, num_followees: int) -> List[str]:
         followees = []
-        count = 1
+        attempts_count = 1
 
         wait_time = self.query_wait_time
         while True:
-            wait_time += 10 * (count // 10)
-            logger.info(f"{count}º attempt. Retrieving the usernames of all followees and converting to CSV...")
+            wait_time += 10 * (attempts_count // 10)
+            logger.info(
+                f"{attempts_count}º attempt. Retrieving the usernames of all followees (followings) and converting to CSV..."
+            )
             followees = [followee.username for followee in self.__profile.get_followees()]
 
             if len(followees) >= num_followees:
                 break
 
-            count += 1
+            attempts_count += 1
             logger.warning(f"Trying again due to Instagram query limitations! Please wait {wait_time} seconds.")
             time.sleep(wait_time)
 
@@ -210,7 +215,7 @@ class InstaBot:
 
         return followees
 
-    def __get_people_that_do_not_follow_back(self) -> list[str]:
+    def __get_people_that_do_not_follow_back(self) -> List[str]:
         logger.info("Retrieving the usernames of all people that do not follow back and converting to CSV...")
 
         people_that_do_not_follow_back = list(filter(lambda u: u not in self.__followers, self.__followees))
@@ -219,7 +224,7 @@ class InstaBot:
 
         return people_that_do_not_follow_back
 
-    def __get_similar_accounts(self) -> list[str]:
+    def __get_similar_accounts(self) -> List[str]:
         logger.info("Retrieving the usernames of all similar accounts and converting to CSV...")
 
         similar_accounts = [sa.username for sa in self.__profile.get_similar_accounts()]
@@ -233,18 +238,19 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         logger.warning(f"Usage: `python {sys.argv[0]} USERNAME PASSWORD`")
         logger.error("Set your credentials properly and try again!")
-    else:
-        username = sys.argv[1]
-        password = sys.argv[2]
-        instagram_instance = InstaBot(username, password)
-        try:
-            title = "Please, choose your option: "
-            options = instagram_instance.see_all_methods_as_list()
-            option, index = pick(options, title, indicator="=>", default_index=0)
-            print(f"{index + 1}º", "method chosen:", option, end="\n\n")
+        sys.exit(1)
 
-            instagram_instance.run(option.lower())
-        except:
-            logger.critical(traceback.format_exc())
-        finally:
-            instagram_instance.end_session()
+    username = sys.argv[1]
+    password = sys.argv[2]
+    instagram_instance = InstaBot(username, password)
+    try:
+        title = "Please, choose your option: "
+        options = instagram_instance.see_all_methods_as_list()
+        option, index = pick(options, title, indicator="=>", default_index=0)
+        print(f"{index + 1}º", "method chosen:", option, end="\n\n")
+
+        instagram_instance.run(option.lower())
+    except:
+        logger.critical(traceback.format_exc())
+    finally:
+        instagram_instance.end_session()
