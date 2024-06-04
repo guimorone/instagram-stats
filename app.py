@@ -1,10 +1,11 @@
+import os
 import sys
-import time
 import timeit
 import traceback
 import pandas as pd
 import instaloader
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Set, Iterator, Any
+from instaloader.nodeiterator import NodeIterator
 from instaloader.exceptions import (
     TwoFactorAuthRequiredException,
     ConnectionException,
@@ -12,28 +13,23 @@ from instaloader.exceptions import (
     ProfileNotExistsException,
 )
 from pick import pick
-from modules.instaloader_rate_controller import InstaloaderRateController
 from utils.misc import setup_logger, get_runtime_text
-from utils.constants import USERS_LIMIT, SECONDS_TO_ADD, QUERY_WAIT
+from utils.constants import MAXIMUM_LOGIN_TRIES
 
 logger = setup_logger(__name__)
 
 
 class InstaBot:
-    def __init__(self, username: str, password: str, add_before_query_secs: bool = True) -> None:
-        self.add_before_query_secs: bool = add_before_query_secs
-        self.query_wait_time: int = QUERY_WAIT
+    def __init__(self, username: str, password: str, *args: Any, **kwargs: Any) -> None:
         self.__username: str = username.strip()
         self.__password: str = password.strip()
-        self.__Loader: instaloader.Instaloader = instaloader.Instaloader(
-            rate_controller=lambda ctx: InstaloaderRateController(ctx)
-        )
+        self.__Loader: instaloader.Instaloader = instaloader.Instaloader(*args, **kwargs)
         self.__profile: Optional[instaloader.Profile] = None
         self.profile_to_fetch: str = ""
-        self.__followers: List[str] = []
-        self.__followees: List[str] = []
-        self.__people_that_do_not_follow_back: List[str] = []
-        self.__similar_accounts: List[str] = []
+        self.__followers: Set[str] = set()
+        self.__followees: Set[str] = set()
+        self.__people_that_do_not_follow_back: Set[str] = set()
+        self.__similar_accounts: Set[str] = set()
 
         self.__all_methods = {
             "get_followers_stats": {
@@ -55,16 +51,16 @@ class InstaBot:
     def see_current_method(self) -> str:
         return self.__method_applied
 
-    def get_followers_list(self) -> List[str]:
+    def get_followers_list(self) -> Set[str]:
         return self.__followers
 
-    def get_followees_list(self) -> List[str]:
+    def get_followees_list(self) -> Set[str]:
         return self.__followees
 
-    def get_people_that_do_not_follow_back_list(self) -> List[str]:
+    def get_people_that_do_not_follow_back_list(self) -> Set[str]:
         return self.__people_that_do_not_follow_back
 
-    def get_similar_accounts_list(self) -> List[str]:
+    def get_similar_accounts_list(self) -> Set[str]:
         return self.__similar_accounts
 
     # PUBLIC METHODS
@@ -75,19 +71,29 @@ class InstaBot:
         self.__start_time: float = timeit.default_timer()
         self.__method_applied: str = method_choose
         self.__login()
+        login_tries = 1
         while True:
             try:
                 self.__all_methods.get(self.__method_applied).get("method")()
             except ConnectionException:
-                logger.error("Connection expired, logging in again...")
+                logger.error(f"Connection expired, logging in again ({login_tries}º attempt)...")
+                login_tries += 1
                 self.__login()
+                if login_tries > MAXIMUM_LOGIN_TRIES:
+                    logger.critical("Too many login attempts, exiting...")
+                    break
             except:
                 traceback.print_exc()
-                logger.error(f"{self.__method_applied} FAILED TO EXECUTE!")
-                logger.warning(f"Waiting {self.query_wait_time} seconds before trying again.")
-                time.sleep(self.query_wait_time)
+                logger.critical(f"{self.__method_applied} FAILED TO EXECUTE!")
+                break
             else:
                 break
+
+    def convert_to_csv(self, data: Set[str], file_name: str, columns: List[str] = ["Username"]) -> None:
+        df = pd.DataFrame(data, columns=columns)
+        if 'data' not in os.listdir():
+            os.mkdir('data')
+        df.to_csv(f"data/{file_name}.csv", index=False)
 
     def debug_numbers(self, header: str = "NUMBERS") -> None:
         title = header
@@ -127,15 +133,20 @@ class InstaBot:
                 else:
                     break
 
-    def __rate_controller_add_before_query_secs(self, secs: int) -> None:
-        self.__Loader.context._rate_controller.add_before_query_secs(secs)
-
     def __get_followers_stats(self) -> None:
         self.__profile, num_followers, num_followees = self.__get_profile()
-        self.__followers = self.__get_followers(num_followers)
-        self.__followees = self.__get_followees(num_followees)
-        self.__people_that_do_not_follow_back = self.__get_people_that_do_not_follow_back()
-        self.__similar_accounts = self.__get_similar_accounts()
+        self.__followers = self.__get_list(
+            self.__profile.get_followers(), f"followers_{self.__profile.username}", num_followers
+        )
+        self.__followees = self.__get_list(
+            self.__profile.get_followees(), f"followees_{self.__profile.username}", num_followees
+        )
+        self.__people_that_do_not_follow_back = self.__get_people_that_do_not_follow_back(
+            f"people_that_do_not_follow_back_{self.__profile.username}"
+        )
+        self.__similar_accounts = self.__get_list(
+            self.__profile.get_similar_accounts(), f"similar_accounts_{self.__profile.username}"
+        )
 
     def __get_profile(self) -> Tuple[instaloader.Profile, int, int]:
         profile = None
@@ -162,76 +173,32 @@ class InstaBot:
 
         num_followers = profile.followers
         num_followees = profile.followees
-        if self.add_before_query_secs:
-            self.__rate_controller_add_before_query_secs(
-                ((num_followers + num_followees) // USERS_LIMIT) * SECONDS_TO_ADD
-            )
 
         return profile, num_followers, num_followees
 
-    def __get_followers(self, num_followers: int) -> List[str]:
-        followers = []
-        attempts_count = 1
+    def __get_list(
+        self,
+        iterator: NodeIterator[instaloader.Profile] | Iterator[instaloader.Profile],
+        file_name: str,
+        num_to_check: Optional[int] | None = None,
+        columns: List[str] = ["Username"],
+    ) -> Set[str]:
+        logger.info(f"Retrieving the usernames of all {file_name} and converting to CSV...")
 
-        wait_time = self.query_wait_time
-        while True:
-            wait_time += 10 * (attempts_count // 10)
-            logger.info(f"{attempts_count}º attempt. Retrieving the usernames of all followers and converting to CSV...")
-            followers = [follower.username for follower in self.__profile.get_followers()]
+        data = {profile.username for profile in iterator}
+        if num_to_check is not None and len(data) < num_to_check:
+            logger.warning(f"Only {len(data)} {file_name} were found, less than {num_to_check}!")
+        self.convert_to_csv(data, file_name, columns)
 
-            if len(followers) >= num_followers:
-                break
+        return data
 
-            attempts_count += 1
-            logger.warning(f"Trying again due to Instagram query limitations! Please wait {wait_time} seconds.")
-            time.sleep(wait_time)
-
-        followers_df = pd.DataFrame(followers, columns=["Username"])
-        followers_df.to_csv("followers.csv", index=False)
-
-        return followers
-
-    def __get_followees(self, num_followees: int) -> List[str]:
-        followees = []
-        attempts_count = 1
-
-        wait_time = self.query_wait_time
-        while True:
-            wait_time += 10 * (attempts_count // 10)
-            logger.info(
-                f"{attempts_count}º attempt. Retrieving the usernames of all followees (followings) and converting to CSV..."
-            )
-            followees = [followee.username for followee in self.__profile.get_followees()]
-
-            if len(followees) >= num_followees:
-                break
-
-            attempts_count += 1
-            logger.warning(f"Trying again due to Instagram query limitations! Please wait {wait_time} seconds.")
-            time.sleep(wait_time)
-
-        followees_df = pd.DataFrame(followees, columns=["Username"])
-        followees_df.to_csv("followees.csv", index=False)
-
-        return followees
-
-    def __get_people_that_do_not_follow_back(self) -> List[str]:
+    def __get_people_that_do_not_follow_back(self, file_name: str) -> Set[str]:
         logger.info("Retrieving the usernames of all people that do not follow back and converting to CSV...")
 
-        people_that_do_not_follow_back = list(filter(lambda u: u not in self.__followers, self.__followees))
-        people_that_do_not_follow_back_df = pd.DataFrame(people_that_do_not_follow_back, columns=["Username"])
-        people_that_do_not_follow_back_df.to_csv("people_that_do_not_follow_back.csv", index=False)
+        people_that_do_not_follow_back = set(filter(lambda u: u not in self.__followers, self.__followees))
+        self.convert_to_csv(people_that_do_not_follow_back, file_name)
 
         return people_that_do_not_follow_back
-
-    def __get_similar_accounts(self) -> List[str]:
-        logger.info("Retrieving the usernames of all similar accounts and converting to CSV...")
-
-        similar_accounts = [sa.username for sa in self.__profile.get_similar_accounts()]
-        similar_accounts_df = pd.DataFrame(similar_accounts, columns=["Username"])
-        similar_accounts_df.to_csv("simillar_accounts.csv", index=False)
-
-        return similar_accounts
 
 
 if __name__ == "__main__":

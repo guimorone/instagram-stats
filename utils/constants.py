@@ -6,8 +6,5 @@ RED = "\x1b[31;20m"
 BOLD_RED = "\x1b[31;1m"
 RESET = "\x1b[0m"
 
-# QUERY WAIT TIME
-USERS_LIMIT = 700
-SECONDS_TO_ADD = 10
-SLEEP_GAP = 20 # seconds
-QUERY_WAIT = 20 # seconds
+
+MAXIMUM_LOGIN_TRIES = 3
