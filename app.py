@@ -30,7 +30,6 @@ class InstaBot:
         self.__followees: Set[str] = set()
         self.__people_that_do_not_follow_back: Set[str] = set()
         self.__similar_accounts: Set[str] = set()
-
         self.__all_methods = {
             "get_followers_stats": {
                 "method": self.__get_followers_stats,
@@ -42,7 +41,7 @@ class InstaBot:
                 ),
             }
         }
-        self.__method_applied = ""
+        self.__method_applied: str = ""
 
     # GETTERS AND SETTERS
     def see_all_methods_as_list(self, upper_names: bool = True) -> List[str]:
