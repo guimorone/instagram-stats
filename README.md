@@ -34,5 +34,3 @@ PASSWORD = password of the account to log in
 - If you're having trouble logging into the account, try logging in to the browser first or confirm the login activity in the app.
 - Instagram API limits the number of requests, so it is recommended to use it with caution, as it may block the account (not forever normally).
 - The CSV files will be saved in the `data` folder.
-- The CSV files will be saved with the name of the account that you choose.
-- The CSV files will be saved with the following format: `followers_{USERNAME}.csv`, `followings_{USERNAME}.csv`, `not_follow_back_{USERNAME}.csv`.
