@@ -6,25 +6,42 @@ Execute instagram commands:
 
 ## Requirements
 
-- Python 3.12.3
-- Poetry 1.8.3
+- Python 3.13.2
 
-Libs at `pyproject.toml`
+Libs at `requirements.txt`
 
 ## Usage
 
 ```sh
-  pip install poetry=='1.8.3'
-  poetry install
+  pip install -r requirements.txt
 ```
 
-USERNAME = username of the account to log in
+As the normal login was not working properly, the usage of the instaloader `load_session` method was used. This method requires a session object to be created first:
 
-PASSWORD = password of the account to log in
+```python
+# Login to Instagram with your username and password on your Browser
+# Then, open the developer tools (F12) and go to the Application tab
+# Look for the Cookies section and find the cookies for Instagram
+# Copy the values for the following cookies:
+# csrftoken, ds_user_id, ig_did, mid, sessionid
+session_context = {
+    "csrftoken": "Token",
+    "ds_user_id": "Token",
+    "ig_did": "Token",
+    "mid": "Token",
+    "sessionid": "Token"
+}
+```
+
+Paste the values in the `session_context` dictionary in the `app.py` file.
+
+Then, run the script with the following command:
 
 ```sh
-  python app.py {USERNAME} {PASSWORD}
+  python app.py {USERNAME}
 ```
+
+Where `{USERNAME}` is the username you have used to get the cookies.
 
 ## Notes
 

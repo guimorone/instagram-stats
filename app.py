@@ -4,25 +4,19 @@ import timeit
 import traceback
 import pandas as pd
 import instaloader
-from typing import List, Tuple, Optional, Set, Iterator, Any
+from typing import Dict, Any, List, Tuple, Optional, Set, Iterator
 from instaloader.nodeiterator import NodeIterator
-from instaloader.exceptions import (
-    TwoFactorAuthRequiredException,
-    ConnectionException,
-    BadCredentialsException,
-    ProfileNotExistsException,
-)
+from instaloader.exceptions import ProfileNotExistsException
 from pick import pick
 from utils.misc import setup_logger, get_runtime_text
-from utils.constants import MAXIMUM_LOGIN_TRIES
 
 logger = setup_logger(__name__)
 
 
 class InstaBot:
-    def __init__(self, username: str, password: str, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, username: str, session_context: Dict[str, Any], *args, **kwargs) -> None:
         self.__username: str = username.strip()
-        self.__password: str = password.strip()
+        self.__session_context: Dict[str, Any] = session_context
         self.__Loader: instaloader.Instaloader = instaloader.Instaloader(*args, **kwargs)
         self.__profile: Optional[instaloader.Profile] = None
         self.profile_to_fetch: str = ""
@@ -43,23 +37,29 @@ class InstaBot:
         }
         self.__method_applied: str = ""
 
-    # GETTERS AND SETTERS
-    def see_all_methods_as_list(self, upper_names: bool = True) -> List[str]:
+    # GETTERS
+    @property
+    def all_methods(self, upper_names: bool = True) -> List[str]:
         return [m.upper() if upper_names else m for m in self.__all_methods.keys()]
 
-    def see_current_method(self) -> str:
+    @property
+    def method_applied(self) -> str:
         return self.__method_applied
 
-    def get_followers_list(self) -> Set[str]:
+    @property
+    def followers(self) -> Set[str]:
         return self.__followers
 
-    def get_followees_list(self) -> Set[str]:
+    @property
+    def followees(self) -> Set[str]:
         return self.__followees
 
-    def get_people_that_do_not_follow_back_list(self) -> Set[str]:
+    @property
+    def people_that_do_not_follow_back(self) -> Set[str]:
         return self.__people_that_do_not_follow_back
 
-    def get_similar_accounts_list(self) -> Set[str]:
+    @property
+    def similar_accounts(self) -> Set[str]:
         return self.__similar_accounts
 
     # PUBLIC METHODS
@@ -69,29 +69,17 @@ class InstaBot:
 
         self.__start_time: float = timeit.default_timer()
         self.__method_applied: str = method_choose
-        self.__login()
-        login_tries = 1
-        while True:
-            try:
-                self.__all_methods.get(self.__method_applied).get("method")()
-            except ConnectionException:
-                logger.error(f"Connection expired, logging in again ({login_tries}º attempt)...")
-                login_tries += 1
-                self.__login()
-                if login_tries > MAXIMUM_LOGIN_TRIES:
-                    logger.critical("Too many login attempts, exiting...")
-                    break
-            except:
-                traceback.print_exc()
-                logger.critical(f"{self.__method_applied} FAILED TO EXECUTE!")
-                break
-            else:
-                break
+        self.__Loader.load_session(self.__username, self.__session_context)
+        try:
+            self.__all_methods.get(self.__method_applied).get("method")()
+        except Exception:
+            traceback.print_exc()
+            logger.critical(f"{self.__method_applied} FAILED TO EXECUTE!")
 
     def convert_to_csv(self, data: Set[str], file_name: str, columns: List[str] = ["Username"]) -> None:
         df = pd.DataFrame(data, columns=columns)
-        if 'data' not in os.listdir():
-            os.mkdir('data')
+        if "data" not in os.listdir():
+            os.mkdir("data")
         df.to_csv(f"data/{file_name}.csv", index=False)
 
     def debug_numbers(self, header: str = "NUMBERS") -> None:
@@ -104,7 +92,7 @@ class InstaBot:
         logger.debug(f"---------------- {title} ----------------")
         try:
             self.__all_methods.get(self.__method_applied).get("debug")()
-        except:
+        except Exception:
             logger.error("Error while trying to print the debug numbers")
         finally:
             end_time = timeit.default_timer()
@@ -115,22 +103,6 @@ class InstaBot:
         if with_debug:
             self.debug_numbers()
         self.__Loader.close()
-
-    # PRIVATE METHODS
-    def __login(self) -> None:
-        try:
-            logger.info(f"Logging into {self.__username} account...")
-            self.__Loader.login(self.__username, self.__password)
-        except TwoFactorAuthRequiredException:
-            code = input("Verification Code: ")
-            while True:
-                try:
-                    self.__Loader.two_factor_login(code)
-                except BadCredentialsException:
-                    logger.error("Invalid verification code, try again!")
-                    code = input("Verification Code (try again): ")
-                else:
-                    break
 
     def __get_followers_stats(self) -> None:
         self.__profile, num_followers, num_followees = self.__get_profile()
@@ -165,6 +137,7 @@ class InstaBot:
                 profile_to_fetch = input("Profile to fetch (skip to fetch the logged account): ")
             except Exception as err:
                 logger.error(err)
+                break
             else:
                 break
 
@@ -201,22 +174,27 @@ class InstaBot:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        logger.warning(f"Usage: `python {sys.argv[0]} USERNAME PASSWORD`")
-        logger.error("Set your credentials properly and try again!")
+    if len(sys.argv) != 2:
+        logger.warning(f"Usage: `python {sys.argv[0]} USERNAME`")
+        logger.error("Set your username properly and try again!")
         sys.exit(1)
 
     username = sys.argv[1]
-    password = sys.argv[2]
-    instagram_instance = InstaBot(username, password)
+    session_context = {
+        "csrftoken": "Token",
+        "ds_user_id": "Token",
+        "ig_did": "Token",
+        "mid": "Token",
+        "sessionid": "Token",
+    }
+    instagram_instance = InstaBot(username, session_context)
     try:
         title = "Please, choose your option: "
-        options = instagram_instance.see_all_methods_as_list()
-        option, index = pick(options, title, indicator="=>", default_index=0)
+        option, index = pick(instagram_instance.all_methods, title, indicator="=>", default_index=0)
         print(f"{index + 1}º", "method chosen:", option, end="\n\n")
 
         instagram_instance.run(option.lower())
-    except:
+    except Exception:
         logger.critical(traceback.format_exc())
     finally:
         instagram_instance.end_session()

@@ -1,11 +1,9 @@
 import logging
-from utils.constants import *
+from utils.constants import RESET, GREY, BLUE, YELLOW, RED, BOLD_RED
 
 
 class CustomLoggerFormatter(logging.Formatter):
-    default_string = (
-        "%(asctime)s - (%(filename)s:%(lineno)d) - %(levelname)s : %(message)s"
-    )
+    default_string = "%(asctime)s - (%(filename)s:%(lineno)d) - %(levelname)s : %(message)s"
 
     FORMATS = {
         logging.DEBUG: GREY + default_string + RESET,

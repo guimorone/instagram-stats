@@ -3,16 +3,14 @@ from modules.custom_logger_formatter import CustomLoggerFormatter
 
 
 def setup_logger(
-    name: str,
-    level: int = logging.DEBUG,
-    Formatter: logging.Formatter = CustomLoggerFormatter,
+    name: str, level: int = logging.DEBUG, formatter: logging.Formatter = CustomLoggerFormatter
 ) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(level)
 
     ch = logging.StreamHandler()
     ch.setLevel(level)
-    ch.setFormatter(Formatter())
+    ch.setFormatter(formatter())
 
     logger.addHandler(ch)
 
@@ -26,9 +24,6 @@ def get_runtime_text(start_time: float, end_time: float) -> str:
     runtime_text = f"{int(seconds)} {'seconds' if seconds > 1 else 'second'}"
 
     if minutes:
-        runtime_text = (
-            f"{int(minutes)} {'minutes' if minutes > 1 else 'minute'} and "
-            + runtime_text
-        )
+        runtime_text = f"{int(minutes)} {'minutes' if minutes > 1 else 'minute'} and " + runtime_text
 
     return runtime_text
